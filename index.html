@@ -1,0 +1,1422 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>NEON SNAKE</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body {
+            width: 100%; height: 100%;
+            overflow: hidden;
+            background: #05050a;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #gameCanvas { position: fixed; inset: 0; display: block; z-index: 1; }
+        /* ---------- HUD ---------- */
+        #hud {
+            position: fixed; top: 0; left: 0; right: 0; z-index: 5;
+            display: flex; justify-content: space-between; align-items: flex-start;
+            padding: max(14px, env(safe-area-inset-top)) 16px 0;
+            pointer-events: none;
+        }
+        .hud-box {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 14px; padding: 8px 16px; text-align: center;
+            backdrop-filter: blur(8px);
+        }
+        .hud-label { font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: #8898aa; margin-bottom: 2px; }
+        .hud-val { font-size: 22px; font-weight: 900; color: #00f2fe; text-shadow: 0 0 12px rgba(0,242,254,0.5); }
+        .hud-val.gold { color: #ffd32a; text-shadow: 0 0 12px rgba(255,211,42,0.45); }
+        #comboBadge {
+            position: fixed; top: max(72px, calc(env(safe-area-inset-top) + 66px)); left: 50%;
+            transform: translateX(-50%); z-index: 5; pointer-events: none;
+            font-weight: 900; font-size: 15px; letter-spacing: 1px;
+            color: #ffd32a; text-shadow: 0 0 14px rgba(255,211,42,0.7);
+            opacity: 0; transition: opacity 0.2s;
+        }
+        #buffBar {
+            position: fixed; bottom: max(16px, env(safe-area-inset-bottom)); left: 50%;
+            transform: translateX(-50%); z-index: 5; pointer-events: none;
+            display: flex; gap: 8px;
+        }
+        .buff-chip {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 20px; padding: 5px 12px;
+            font-size: 13px; font-weight: 800; color: #eaf6ff;
+            backdrop-filter: blur(6px); text-shadow: 0 0 8px rgba(0,242,254,0.5);
+        }
+        /* ---------- Overlays ---------- */
+        .overlay {
+            position: fixed; inset: 0; z-index: 10;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            background: radial-gradient(circle at 50% 40%, rgba(10,12,30,0.72), rgba(3,3,8,0.92));
+            backdrop-filter: blur(4px);
+            transition: opacity 0.25s ease; padding: 20px;
+        }
+        .overlay.hidden { opacity: 0; pointer-events: none; visibility: hidden; transition: opacity 0.25s ease, visibility 0s linear 0.25s; }
+        .title {
+            font-size: clamp(34px, 9vw, 56px); font-weight: 900; letter-spacing: 2px; text-align: center;
+            background: linear-gradient(135deg, #00f2fe 0%, #a6ff5e 60%, #ffd32a 100%);
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+            filter: drop-shadow(0 4px 18px rgba(0,242,254,0.35)); margin-bottom: 6px;
+        }
+        .subtitle { color: #a5b1c2; font-size: 14px; text-align: center; max-width: 340px; line-height: 1.45; margin-bottom: 18px; }
+        .btn-main {
+            pointer-events: auto; cursor: pointer; border: none; outline: none;
+            background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+            color: #05050a; font-weight: 900; font-size: 19px; letter-spacing: 1px;
+            padding: 16px 54px; border-radius: 50px;
+            box-shadow: 0 0 28px rgba(0,242,254,0.45);
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+        }
+        .btn-main:active { transform: scale(0.95); box-shadow: 0 0 14px rgba(0,242,254,0.3); }
+        .hint { margin-top: 18px; color: #6b7688; font-size: 12.5px; text-align: center; line-height: 1.6; }
+        .stats-row { display: flex; gap: 14px; margin-bottom: 22px; }
+        .stat-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14); border-radius: 16px; padding: 12px 22px; text-align: center; min-width: 100px; }
+        .death-title {
+            font-size: clamp(28px, 8vw, 44px); font-weight: 900; letter-spacing: 1.5px;
+            color: #ff4d6d; text-shadow: 0 0 22px rgba(255,77,109,0.55);
+            margin-bottom: 6px; text-align: center;
+        }
+        .ending-title {
+            font-size: clamp(26px, 7.5vw, 40px); font-weight: 900; letter-spacing: 1.5px;
+            margin-bottom: 8px; text-align: center; animation: glowIn 0.8s ease both;
+        }
+        @keyframes glowIn { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+        .new-record {
+            color: #ffd32a; font-weight: 900; font-size: 16px; letter-spacing: 1px;
+            margin-bottom: 14px; text-shadow: 0 0 14px rgba(255,211,42,0.6);
+            animation: pulse 0.9s ease-in-out infinite alternate;
+        }
+        .new-record.hidden-rec { display: none; }
+        @keyframes pulse { from { opacity: 0.6; } to { opacity: 1; } }
+        /* ---------- Difficulty picker ---------- */
+        .diff-list { display: flex; flex-direction: column; gap: 10px; width: min(360px, 90vw); margin-bottom: 16px; }
+        .diff-btn {
+            pointer-events: auto; cursor: pointer; text-align: left;
+            display: flex; align-items: center; gap: 12px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 16px; padding: 12px 16px;
+            color: #eaf6ff; transition: transform 0.12s ease, border-color 0.2s, box-shadow 0.2s;
+        }
+        .diff-btn:active { transform: scale(0.97); }
+        .diff-btn.sel { border-color: var(--dc); box-shadow: 0 0 18px var(--dg); }
+        .diff-icon { font-size: 26px; filter: drop-shadow(0 0 8px var(--dg)); }
+        .diff-name { font-weight: 900; font-size: 16px; letter-spacing: 1px; color: var(--dc); }
+        .diff-desc { font-size: 11.5px; color: #8fa0b5; margin-top: 2px; line-height: 1.35; }
+        .diff-best { margin-left: auto; text-align: right; font-size: 11px; color: #8898aa; }
+        .diff-best b { display: block; font-size: 16px; color: #ffd32a; text-shadow: 0 0 10px rgba(255,211,42,0.4); }
+        .diff-clear { display: block; font-size: 17px; line-height: 1; }
+        .diff-btn.cleared { border-color: var(--dc); background: linear-gradient(135deg, rgba(255,255,255,0.05), rgba(255,255,255,0.09)); }
+        .diff-btn.cleared .diff-name::after { content: ' ✓ ПРОЙДЕН'; font-size: 10px; letter-spacing: 1px; opacity: 0.85; }
+        /* ---------- Sandbox speed picker ---------- */
+        #sandboxPicker { flex-direction: row; gap: 8px; justify-content: center; }
+        .sb-speed {
+            pointer-events: auto; cursor: pointer; flex: 1;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 14px; padding: 10px 6px;
+            color: #a5b1c2; font-weight: 800; font-size: 12.5px; letter-spacing: 0.5px;
+            transition: transform 0.12s ease, border-color 0.2s, box-shadow 0.2s, color 0.2s;
+        }
+        .sb-speed:active { transform: scale(0.95); }
+        .sb-speed.sel { border-color: #ffd32a; color: #ffd32a; box-shadow: 0 0 14px rgba(255,211,42,0.3); background: rgba(255,211,42,0.08); }
+        /* ---------- goal chip ---------- */
+        #goalChip {
+            position: fixed; top: max(64px, calc(env(safe-area-inset-top) + 58px)); left: 50%;
+            transform: translateX(-50%); z-index: 5; pointer-events: none;
+            background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.16);
+            border-radius: 20px; padding: 5px 14px;
+            font-size: 12.5px; font-weight: 800; letter-spacing: 0.6px; color: #eaf6ff;
+            backdrop-filter: blur(8px); white-space: nowrap;
+        }
+        /* ---------- Buttons ---------- */
+        #pauseBtn {
+            position: fixed; bottom: max(18px, env(safe-area-inset-bottom)); right: 18px;
+            z-index: 6; width: 52px; height: 52px; border-radius: 50%;
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18);
+            color: #cfd8e3; font-size: 20px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);
+        }
+        #pauseBtn:active { transform: scale(0.92); }
+        #muteBtn {
+            position: fixed; bottom: max(18px, env(safe-area-inset-bottom)); left: 18px;
+            z-index: 6; width: 46px; height: 46px; border-radius: 50%;
+            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18);
+            color: #cfd8e3; font-size: 17px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; backdrop-filter: blur(6px);
+        }
+        .keys { display: flex; gap: 6px; justify-content: center; margin-top: 4px; }
+        .key {
+            width: 34px; height: 34px; border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.06);
+            color: #a5b1c2; font-size: 16px; display: flex; align-items: center; justify-content: center;
+        }
+        .countdown {
+            font-size: clamp(70px, 22vw, 130px); font-weight: 900; color: #00f2fe;
+            text-shadow: 0 0 40px rgba(0,242,254,0.8); animation: cdPop 0.55s ease both;
+        }
+        @keyframes cdPop { 0% { transform: scale(1.7); opacity: 0; } 40% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.95); opacity: 0.85; } }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="hud" style="display:none;">
+        <div class="hud-box">
+            <div class="hud-label">Счёт</div>
+            <div class="hud-val" id="scoreVal">0</div>
+        </div>
+        <div class="hud-box">
+            <div class="hud-label">Рекорд</div>
+            <div class="hud-val gold" id="bestVal">0</div>
+        </div>
+    </div>
+    <div id="comboBadge"></div>
+    <div id="goalChip" style="display:none;"></div>
+    <div id="buffBar"></div>
+
+    <button id="pauseBtn" style="display:none;">⏸</button>
+    <button id="muteBtn" style="display:none;">🔊</button>
+
+    <!-- Start screen -->
+    <div id="startScreen" class="overlay">
+        <div class="title">NEON&nbsp;SNAKE</div>
+        <div class="subtitle">Плавная неоновая змейка с ивентами, бонусами и бомбами. Выбери режим — у каждого своя концовка.</div>
+        <div class="diff-list">
+            <button class="diff-btn sel" data-diff="easy" style="--dc:#a6ff5e; --dg:rgba(166,255,94,0.35);">
+                <span class="diff-icon">🌿</span>
+                <span><span class="diff-name">ДЗЕН</span><div class="diff-desc">Спокойный темп, стены пропускают. Яблоки-щиты и золото. Финал: собери 60 яблок</div></span>
+                <span class="diff-best"><span class="diff-clear" id="clearEasy"></span>рекорд<b id="bestEasy">0</b></span>
+            </button>
+            <button class="diff-btn" data-diff="normal" style="--dc:#00f2fe; --dg:rgba(0,242,254,0.35);">
+                <span class="diff-icon">⚡</span>
+                <span><span class="diff-name">НЕОН</span><div class="diff-desc">Классика на скорость. Турбо, фантомы, глючные блоки. Финал: собери 125 яблок</div></span>
+                <span class="diff-best"><span class="diff-clear" id="clearNormal"></span>рекорд<b id="bestNormal">0</b></span>
+            </button>
+            <button class="diff-btn" data-diff="hard" style="--dc:#ff4d6d; --dg:rgba(255,77,109,0.4);">
+                <span class="diff-icon">💀</span>
+                <span><span class="diff-name">ХАОС</span><div class="diff-desc">Бешеный темп. Бомбы тикают, экран глючит, завалы блоков. Финал: 150 яблок + 90с выживания после цели</div></span>
+                <span class="diff-best"><span class="diff-clear" id="clearHard"></span>рекорд<b id="bestHard">0</b></span>
+            </button>
+            <button class="diff-btn" data-diff="sandbox" style="--dc:#ffd32a; --dg:rgba(255,211,42,0.35);">
+                <span class="diff-icon">🏗</span>
+                <span><span class="diff-name">ПЕСОЧНИЦА</span><div class="diff-desc">Только ты, сетка и змейка. Никаких ивентов. Заполни всё поле — стань ФИНИШЕРОМ</div></span>
+                <span class="diff-best"><span class="diff-clear" id="clearSandbox"></span>рекорд<b id="bestSandbox">0</b></span>
+            </button>
+        </div>
+        <!-- sandbox speed picker -->
+        <div class="diff-list" id="sandboxPicker" style="display:none; margin-top:-6px;">
+            <span style="width:100%; text-align:center; font-size:11px; letter-spacing:2px; color:#8fa0b5; margin-bottom:2px;">СКОРОСТЬ ЗМЕИ В ПЕСОЧНИЦЕ — ИВЕТОВ НЕТ</span>
+            <button class="sb-speed sel" data-spd="easy">🌿 МЕДЛЕННО</button>
+            <button class="sb-speed" data-spd="normal">⚡ СРЕДНЕ</button>
+            <button class="sb-speed" data-spd="hard">💀 БЫСТРО</button>
+        </div>
+        <button class="btn-main" id="startBtn">ПОГНАЛИ!</button>
+        <div class="hint">
+            Свайпай по экрану или используй
+            <div class="keys"><span class="key">←</span><span class="key">↑</span><span class="key">↓</span><span class="key">→</span>&nbsp;<span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span></div>
+        </div>
+    </div>
+
+    <!-- Countdown -->
+    <div id="cdScreen" class="overlay hidden" style="background:rgba(3,3,8,0.35);">
+        <div class="countdown" id="cdText">3</div>
+    </div>
+
+    <!-- Pause -->
+    <div id="pauseScreen" class="overlay hidden">
+        <div class="title" style="font-size:clamp(26px,7vw,40px);">ПАУЗА</div>
+        <button class="btn-main" id="resumeBtn">ПРОДОЛЖИТЬ</button>
+        <div class="hint">или нажми ПРОБЕЛ</div>
+    </div>
+
+    <!-- Game over / ending -->
+    <div id="overScreen" class="overlay hidden">
+        <div class="death-title" id="deathTitle">КОНЕЦ ИГРЫ!</div>
+        <div class="subtitle" id="endFlavor" style="margin-bottom:14px;"></div>
+        <div class="new-record hidden-rec" id="recBadge">🏆 НОВЫЙ РЕКОРД!</div>
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="best-label">Счёт</div>
+                <div class="hud-val" id="finalScore">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="best-label">Рекорд</div>
+                <div class="hud-val gold" id="finalBest">0</div>
+            </div>
+        </div>
+        <button class="btn-main" id="restartBtn">ЕЩЁ РАЗ</button>
+        <div class="hint" id="menuLink" style="text-decoration:underline; cursor:pointer; pointer-events:auto;">сменить режим</div>
+    </div>
+
+<script>
+(function () {
+    'use strict';
+
+    // ==================== TELEGRAM ====================
+    const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+    if (tg) { try { tg.ready(); tg.expand(); } catch (e) {} }
+    function haptic(style) {
+        try { if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred(style || 'light'); } catch (e) {}
+    }
+
+    // ==================== AUDIO ====================
+    const sfx = {
+        ctx: null, master: null, muted: false, musicStep: 0, musicStop: null,
+        init() {
+            if (!this.ctx) {
+                try {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    this.master = this.ctx.createGain();
+                    this.master.gain.value = 0.9;
+                    this.master.connect(this.ctx.destination);
+                } catch (e) {}
+            }
+            if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+        },
+        _out(node, vol, t) {
+            const g = this.ctx.createGain();
+            g.gain.setValueAtTime(vol, t);
+            node.connect(g); g.connect(this.master);
+            return g;
+        },
+        tone(freq, dur, type, vol, slideTo, delay) {
+            if (!this.ctx || this.muted) return;
+            const t = this.ctx.currentTime + (delay || 0);
+            const o = this.ctx.createOscillator();
+            o.type = type || 'square';
+            o.frequency.setValueAtTime(freq, t);
+            if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(1, slideTo), t + dur);
+            const g = this._out(o, vol || 0.08, t);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            o.start(t); o.stop(t + dur + 0.02);
+        },
+        noise(dur, vol, freq, type) {
+            if (!this.ctx || this.muted) return;
+            const t = this.ctx.currentTime;
+            const len = Math.floor(this.ctx.sampleRate * dur);
+            const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+            const src = this.ctx.createBufferSource(); src.buffer = buf;
+            const f = this.ctx.createBiquadFilter();
+            f.type = type || 'lowpass'; f.frequency.value = freq || 800;
+            src.connect(f);
+            const g = this._out(f, vol, t);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            src.start(t);
+        },
+        chord(freqs, dur, type, vol, gap) {
+            freqs.forEach((f, i) => this.tone(f, dur, type || 'triangle', vol || 0.05, null, i * (gap || 0.09)));
+        },
+        eat(combo) { const b = 420 + Math.min(combo, 12) * 32; this.tone(b, 0.08, 'square', 0.055, b * 1.6); this.tone(b * 2, 0.05, 'sine', 0.03, b * 2.6, 0.02); },
+        gold() { this.chord([660, 880, 1100, 1320], 0.14, 'triangle', 0.05, 0.05); },
+        shieldPick() { this.tone(300, 0.25, 'sine', 0.06, 900); this.noise(0.12, 0.03, 2400, 'highpass'); },
+        speedPick() { this.tone(500, 0.18, 'sawtooth', 0.05, 1400); },
+        ghostPick() { this.tone(700, 0.3, 'sine', 0.05, 350); this.tone(1050, 0.3, 'sine', 0.03, 520, 0.05); },
+        bombSpawn() { this.tone(140, 0.2, 'square', 0.045, 90); },
+        tick() { this.tone(1200, 0.03, 'square', 0.04); },
+        explosion() {
+            this.noise(0.5, 0.22, 500);
+            this.tone(90, 0.4, 'sine', 0.16, 30);
+            this.tone(200, 0.25, 'sawtooth', 0.08, 50, 0.03);
+        },
+        nearMiss() { this.tone(1800, 0.05, 'sine', 0.03, 1200); },
+        turn() { this.tone(660, 0.03, 'triangle', 0.02); },
+        ui() { this.tone(520, 0.05, 'triangle', 0.04, 700); },
+        countdown(final) { final ? this.chord([880, 1174], 0.16, 'square', 0.05, 0) : this.tone(660, 0.09, 'square', 0.05); },
+        die() {
+            this.tone(300, 0.35, 'sawtooth', 0.09, 60);
+            setTimeout(() => this.tone(180, 0.4, 'square', 0.07, 40), 80);
+            setTimeout(() => this.noise(0.3, 0.08, 400), 120);
+        },
+        fanfare() {
+            this.chord([523, 659, 784, 1046, 1318], 0.5, 'triangle', 0.055, 0.12);
+            setTimeout(() => this.chord([1046, 1318, 1568], 0.8, 'sine', 0.05, 0.06), 700);
+        },
+        goalReached() { this.chord([659, 880, 1109, 1318], 0.4, 'triangle', 0.06, 0.08); this.tone(1760, 0.5, 'sine', 0.03, 2217, 0.2); },
+        glitch() { this.noise(0.18, 0.06, 3000, 'bandpass'); this.tone(60, 0.15, 'square', 0.04, 20); },
+
+        // ---------- Процедурная музыка: секвенсор на lookahead-таймере,
+        // мелодии не зациклены — паттерны с вариациями и псевдослучайным выбором ----------
+        startMusic(diff) {
+            this.stopMusic();
+            if (!this.ctx || this.muted) return;
+            const c = this.ctx;
+            let stopped = false;
+            const stopFn = () => { stopped = true; };
+            this.musicStop = stopFn;
+
+            // лёгкий реверб из шума для объёма
+            function makeReverb(sec, decay) {
+                const len = Math.floor(c.sampleRate * sec);
+                const buf = c.createBuffer(2, len, c.sampleRate);
+                for (let chn = 0; chn < 2; chn++) {
+                    const d = buf.getChannelData(chn);
+                    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+                }
+                const cv = c.createConvolver(); cv.buffer = buf;
+                return cv;
+            }
+
+            const cfgs = {
+                easy:   { bpm: 86,  wave: 'triangle', revSec: 2.6, revDecay: 2.4, mvol: 0.026, svol: 0.016, bass: true,  hats: false },
+                normal: { bpm: 112, wave: 'square',   revSec: 1.6, revDecay: 2.6, mvol: 0.024, svol: 0.014, bass: true,  hats: true },
+                hard:   { bpm: 140, wave: 'sawtooth', revSec: 1.0, revDecay: 3.0, mvol: 0.022, svol: 0.012, bass: true,  hats: true },
+                sandbox:{ bpm: 96,  wave: 'sine',     revSec: 2.2, revDecay: 2.2, mvol: 0.028, svol: 0.016, bass: false, hats: false }
+            };
+            const cfg = cfgs[diff] || cfgs.normal;
+            const beat = 60 / cfg.bpm;          // длительность восьмой ноты
+            const mgain = c.createGain(); mgain.gain.value = 0.9;
+            const conv = makeReverb(cfg.revSec, cfg.revDecay);
+            const wet = c.createGain(); wet.gain.value = 0.35;
+            mgain.connect(c.destination);
+            mgain.connect(conv); conv.connect(wet); wet.connect(c.destination);
+
+            // ---- нотно-табличные "инструменты" ----
+            function blip(freq, at, dur, type, vol, slideTo) {
+                const o = c.createOscillator(); o.type = type;
+                o.frequency.setValueAtTime(freq, at);
+                if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, at + dur);
+                const g = c.createGain();
+                g.gain.setValueAtTime(0.0001, at);
+                g.gain.linearRampToValueAtTime(vol, at + 0.015);
+                g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+                o.connect(g); g.connect(mgain);
+                o.start(at); o.stop(at + dur + 0.03);
+            }
+            function hat(at, vol) {
+                const len = Math.floor(c.sampleRate * 0.04);
+                const buf = c.createBuffer(1, len, c.sampleRate);
+                const d = buf.getChannelData(0);
+                for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+                const src = c.createBufferSource(); src.buffer = buf;
+                const f = c.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7000;
+                const g = c.createGain(); g.gain.value = vol;
+                src.connect(f); f.connect(g); g.connect(mgain);
+                src.start(at);
+            }
+
+            // ---- гаммы и паттерны (A minor pentatonic-ish для всех, разные регистры) ----
+            const SCALES = {
+                easy:   [440.0, 523.25, 587.33, 659.25, 783.99, 880.0],      // Am pent over A
+                normal: [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5],     // C D E G A C
+                hard:   [440.0, 466.16, 554.37, 587.33, 698.46, 880.0],      // тревожный локский
+                sandbox:[392.0, 440.0, 523.25, 587.33, 659.25, 783.99]       // тёплый G
+            };
+            const sc = SCALES[diff] || SCALES.normal;
+            // несколько 16-шаговых мелодических фраз (0 = пауза, индекс в гамме +1)
+            const PHRASES = diff === 'easy' ? [
+                [0,3,0,4, 5,0,4,0, 3,0,2,0, 1,0,0,0],
+                [0,0,4,0, 3,0,5,4, 2,0,3,0, 1,0,0,3],
+                [5,0,4,0, 3,4,5,0, 6,0,5,4, 3,0,1,0]
+            ] : diff === 'hard' ? [
+                [1,0,1,3, 0,1,0,4, 1,0,1,3, 5,4,1,0],
+                [2,0,3,0, 4,0,3,2, 1,1,0,3, 4,0,5,0],
+                [1,3,1,0, 5,0,4,3, 1,0,6,0, 5,4,3,1]
+            ] : [
+                [0,0,3,0, 4,0,5,0, 4,3,0,2, 1,0,0,0],
+                [3,0,4,5, 0,4,3,0, 2,0,1,0, 3,0,4,0],
+                [5,4,0,3, 2,0,4,5, 6,0,5,4, 3,1,0,0]
+            ];
+            // басовые корни по тактам (индексы гаммы)
+            const BASSPROG = diff === 'hard' ? [0,0,3,2] : diff === 'easy' ? [0,2,4,3] : [0,3,4,2];
+            let step = 0, bar = 0;
+            let phrase = PHRASES[0], nextPhrase = PHRASES[1 % PHRASES.length];
+            let musicRnd = (Date.now() & 0xffff) | 1;
+            function rnd() { musicRnd = (musicRnd * 1103515245 + 12345) & 0x7fffffff; return musicRnd / 0x7fffffff; }
+
+            const LOOKAHEAD = 0.12, TICK = 50;
+            let nextTime = c.currentTime + 0.06;
+            const timer = setInterval(() => {
+                if (stopped || !c || state !== 'PLAYING') return;
+                while (nextTime < c.currentTime + LOOKAHEAD) {
+                    const s = step % 16;
+                    const at = nextTime;
+                    // --- мелодия: новая фраза каждый такт, иногда вариации/октавы ---
+                    if (s === 0) {
+                        bar++;
+                        phrase = nextPhrase;
+                        // редкое «эхо»: повторяем предыдущую фразу октавой выше
+                        nextPhrase = rnd() < 0.18 ? phrase
+                            : PHRASES[Math.floor(rnd() * PHRASES.length)];
+                    }
+                    const noteIdx = phrase[s];
+                    if (noteIdx > 0) {
+                        const oct = (rnd() < 0.12) ? 2 : 1;
+                        blip(sc[(noteIdx - 1) % sc.length] * oct, at, beat * (cfg.bpm > 120 ? 1.1 : 1.8), cfg.wave, cfg.mvol);
+                    } else if (s === 8 && diff === 'sandbox') {
+                        blip(sc[0] * 2, at, beat * 3, 'sine', cfg.mvol * 0.8);
+                    }
+                    // --- бас: корень аккорда на первую и пятую долю ---
+                    if (cfg.bass && (s === 0 || s === 8)) {
+                        const root = sc[BASSPROG[bar % BASSPROG.length]] / 4;
+                        blip(root, at, beat * 5.5, 'sine', 0.05);
+                        if (s === 8 && diff === 'hard') blip(root * 1.5, at + beat * 2, beat * 2, 'sine', 0.03);
+                    }
+                    // --- хэты и подпружиненный малый барабан ---
+                    if (cfg.hats && s % 2 === 1) hat(at, 0.018);
+                    if (cfg.hats && s % 8 === 4) hat(at, 0.03);
+                    if (diff === 'hard' && s % 8 === 0) blip(120, at, beat * 0.8, 'sine', 0.06, 55);
+                    // --- эмбиент-подложка дзена: длинный квинтовый дрон раз в 4 такта ---
+                    if (diff === 'easy' && s === 0 && bar % 4 === 0) {
+                        blip(sc[0] / 2, at, beat * 28, 'sine', 0.02);
+                        blip(sc[0] / 2 * 1.5, at, beat * 28, 'sine', 0.012);
+                    }
+                    // --- песочница: спокойные колокольчики ---
+                    if (diff === 'sandbox' && s % 8 === 6 && rnd() < 0.5) {
+                        blip(sc[Math.floor(rnd() * sc.length)] * 2, at, beat * 2.4, 'sine', 0.014);
+                    }
+                    nextTime += beat / 2;
+                    step++;
+                }
+            }, TICK);
+            this.musicStop = () => { stopped = true; clearInterval(timer); try { conv.disconnect(); wet.disconnect(); mgain.disconnect(); } catch (e) {} };
+        },
+        stopMusic() { if (this.musicStop) { this.musicStop(); this.musicStop = null; } }
+    };
+
+    // ==================== CANVAS ====================
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    let cw = 0, ch = 0, dpr = 1;
+    const COLS = 21;
+    let cell = 20, ox = 0, oy = 0, rows = 21;
+
+    function resize() {
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        cw = window.innerWidth;
+        ch = window.innerHeight;
+        canvas.width = Math.floor(cw * dpr);
+        canvas.height = Math.floor(ch * dpr);
+        canvas.style.width = cw + 'px';
+        canvas.style.height = ch + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        const padTop = 74, padBottom = 74;
+        const availH = ch - padTop - padBottom;
+        cell = Math.floor(Math.min((cw - 24) / COLS, availH / COLS));
+        if (cell < 8) cell = 8;
+        rows = Math.max(12, Math.floor(availH / cell));
+        ox = Math.floor((cw - COLS * cell) / 2);
+        oy = Math.floor(padTop + (availH - rows * cell) / 2);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // ==================== DIFFICULTY ====================
+    const DIFFS = {
+        easy: {
+            name: 'ДЗЕН', tick: 155, minTick: 105, accel: 1.4, wrap: true,
+            spawnEvery: 11, types: [['apple', 0.72], ['gold', 0.14], ['shield', 0.14]],
+            goal: 60, theme: '#a6ff5e',
+            ending: { title: '🧘 ДЗЕН-БЕГУЩИЙ', flavor: '60 яблок в потоке без единой стены на пути. Ты нашёл гармонию в неоновом шёпоте — её никогда не существовало.' }
+        },
+        normal: {
+            name: 'НЕОН', tick: 125, minTick: 68, accel: 2.0, wrap: false,
+            spawnEvery: 9, types: [['apple', 0.62], ['gold', 0.12], ['speed', 0.12], ['ghost', 0.09], ['block', 0.05]],
+            goal: 125, theme: '#00f2fe',
+            ending: { title: '👑 ПОВЕЛИТЕЛЬ НЕОНА', flavor: '125 яблок! Сетка склонилась перед тобой. Турбо-призраки будут шептать твоё имя в проводах.' }
+        },
+        hard: {
+            name: 'ХАОС', tick: 100, minTick: 55, accel: 2.6, wrap: false,
+            spawnEvery: 7, types: [['apple', 0.45], ['gold', 0.08], ['speed', 0.1], ['bomb', 0.17], ['glitch', 0.1], ['block', 0.1]],
+            goal: 150, surviveAfterGoal: 90, theme: '#ff4d6d',
+            ending: { title: '💥 АРХИТЕКТОР ХАОСА', flavor: '150 яблок и ещё 90 секунд под бомбами и глитчами после цели. Ты не просто выжил — ты стал самим хаосом.' }
+        },
+        sandbox: {
+            name: 'ПЕСОЧНИЦА', tick: 125, minTick: 68, accel: 2.0, wrap: false,
+            spawnEvery: Infinity, types: [],
+            fillWin: true, theme: '#ffd32a',
+            ending: { title: '🏆 ФИНИШЕР', flavor: 'Поле заполнено до последней клетки. Змейке больше некуда ступить — она стала всем полем. Абсолютный финишер.' }
+        }
+    };
+    let diffKey = localStorage.getItem('neon_snake_diff') || 'easy';
+    if (!DIFFS[diffKey]) diffKey = 'easy';
+    let D = DIFFS[diffKey];
+    // песочница: выбранная скорость (влияет только на темп)
+    let sbSpeed = localStorage.getItem('neon_snake_sb_speed') || 'easy';
+    if (!DIFFS[sbSpeed]) sbSpeed = 'easy';
+    function activeDiff() {
+        if (diffKey !== 'sandbox') return D;
+        const base = DIFFS.sandbox;
+        const spd = DIFFS[sbSpeed] || DIFFS.easy;
+        return Object.assign({}, base, { tick: spd.tick, minTick: spd.minTick, accel: spd.accel });
+    }
+    let A = activeDiff();   // активный профиль (для песочницы — с подмешанной скоростью)
+
+    // ==================== STATE ====================
+    const BEST_KEY = 'neon_snake_best_v2_';
+    const CLEAR_KEY = 'neon_snake_cleared';   // JSON: { easy:true, normal:true, hard:true, sandbox:true }
+    function getBest(k) { return parseInt(localStorage.getItem(BEST_KEY + (k || diffKey)) || '0', 10) || 0; }
+    function setBest(v) { localStorage.setItem(BEST_KEY + diffKey, String(v)); }
+    function getCleared() { try { return JSON.parse(localStorage.getItem(CLEAR_KEY) || '{}') || {}; } catch (e) { return {}; } }
+    function markCleared(k) { const c = getCleared(); c[k] = true; localStorage.setItem(CLEAR_KEY, JSON.stringify(c)); }
+    let best = getBest();
+
+    let state = 'MENU';           // MENU | COUNTDOWN | PLAYING | PAUSED | DYING | OVER
+    let snake = [], prevSnake = [], curT = 1, dir = { x: 1, y: 0 }, nextDirQueue = [];
+    let foods = [], bombs = [], blocks = [];
+    let score = 0, combo = 0, apples = 0, tickMs = 150, acc = 0;
+    let particles = [], floaters = [], rings = [];
+    let flashT = 0, foodPulse = 0, shakeT = 0, shakeMag = 0;
+    let elapsed = 0, spawnTimer = 0;
+    let buffShield = 0, buffSpeed = 0, buffGhost = 0, buffSlow = 0;
+    let glitchT = 0, glitchSeed = 12345, invulnT = 0;
+    let deathAnimT = 0, pendingOver = null;
+    let goalReachedAt = -1;       // для ХАОСа: момент достижения яблочной цели
+
+    function resetGame() {
+        A = activeDiff();
+        const cy = Math.floor(rows / 2);
+        snake = [{ x: 5, y: cy }, { x: 4, y: cy }, { x: 3, y: cy }];
+        prevSnake = snake.map(s => ({ ...s }));
+        curT = 1;
+        dir = { x: 1, y: 0 };
+        nextDirQueue = [];
+        score = 0; combo = 0; apples = 0;
+        tickMs = A.tick; acc = 0;
+        particles = []; floaters = []; rings = [];
+        bombs = []; blocks = [];
+        flashT = 0; shakeT = 0; glitchT = 0; invulnT = 0; deathAnimT = 0; pendingOver = null;
+        elapsed = 0; spawnTimer = 0; goalReachedAt = -1;
+        buffShield = 0; buffSpeed = 0; buffGhost = 0; buffSlow = 0;
+        foods = [{ type: 'apple', x: 10, y: cy, life: Infinity, born: 0 }];
+        updateHud();
+    }
+
+    function cellFree(x, y) {
+        for (const s of snake) if (s.x === x && s.y === y) return false;
+        for (const f of foods) if (f.x === x && f.y === y) return false;
+        for (const b of bombs) if (b.x === x && b.y === y) return false;
+        for (const b of blocks) if (b.x === x && b.y === y) return false;
+        return true;
+    }
+    function randomCell() {
+        for (let t = 0; t < 400; t++) {
+            const x = Math.floor(Math.random() * COLS), y = Math.floor(Math.random() * rows);
+            if (cellFree(x, y)) return { x, y };
+        }
+        return null;
+    }
+    function weightedType() {
+        let r = Math.random(), sum = 0;
+        for (const [tp, w] of A.types) { sum += w; if (r <= sum) return tp; }
+        return 'apple';
+    }
+    function spawnEventItem() {
+        const pos = randomCell();
+        if (!pos) return;
+        const tp = weightedType();
+        if (tp === 'bomb') {
+            bombs.push({ x: pos.x, y: pos.y, fuse: 6, maxFuse: 6, tickAcc: 0 });
+            sfx.bombSpawn();
+            floater(pos.x, pos.y, '💣 БОМБА!', '#ff4d6d');
+        } else if (tp === 'block') {
+            blocks.push({ x: pos.x, y: pos.y });
+            if (Math.random() < 0.4) {
+                const p2 = { x: pos.x, y: Math.min(rows - 1, pos.y + 1) };
+                if (cellFree(p2.x, p2.y)) blocks.push(p2);
+            }
+            sfx.glitch();
+        } else if (tp === 'glitch') {
+            glitchT = 1.6;
+            sfx.glitch();
+            floater(pos.x, pos.y, 'ГЛИТЧ 👾', '#a55eea');
+            if (Math.random() < 0.5) buffSlow = Math.max(buffSlow, 3);
+        } else {
+            const ttl = tp === 'apple' ? Infinity : 9;
+            foods.push({ type: tp, x: pos.x, y: pos.y, life: ttl, born: elapsed });
+        }
+    }
+
+    // ==================== INPUT ====================
+    function queueDir(nx, ny) {
+        const ref = nextDirQueue.length ? nextDirQueue[nextDirQueue.length - 1] : dir;
+        if (ref.x === nx && ref.y === ny) return;
+        if (ref.x === -nx && ref.y === -ny) return;
+        nextDirQueue.push({ x: nx, y: ny });
+        if (nextDirQueue.length > 3) nextDirQueue.shift();
+        sfx.turn();
+    }
+    const KEYMAP = {
+        ArrowUp: [0, -1], KeyW: [0, -1],
+        ArrowDown: [0, 1], KeyS: [0, 1],
+        ArrowLeft: [-1, 0], KeyA: [-1, 0],
+        ArrowRight: [1, 0], KeyD: [1, 0]
+    };
+    window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+            e.preventDefault();
+            if (state === 'PLAYING') pause();
+            else if (state === 'PAUSED') resume();
+            else if (state === 'MENU' || state === 'OVER') beginGame();
+            return;
+        }
+        const m = KEYMAP[e.code];
+        if (m && state === 'PLAYING') { e.preventDefault(); queueDir(m[0], m[1]); }
+    });
+    let touchStart = null;
+    const SWIPE_MIN = 22;
+    canvas.addEventListener('touchstart', (e) => { const t = e.touches[0]; touchStart = { x: t.clientX, y: t.clientY }; }, { passive: true });
+    canvas.addEventListener('touchmove', (e) => {
+        if (!touchStart || state !== 'PLAYING') return;
+        const t = e.touches[0];
+        const dx = t.clientX - touchStart.x, dy = t.clientY - touchStart.y;
+        if (Math.abs(dx) < SWIPE_MIN && Math.abs(dy) < SWIPE_MIN) return;
+        if (Math.abs(dx) > Math.abs(dy)) queueDir(dx > 0 ? 1 : -1, 0); else queueDir(0, dy > 0 ? 1 : -1);
+        touchStart = { x: t.clientX, y: t.clientY };
+    }, { passive: true });
+    canvas.addEventListener('touchend', () => { touchStart = null; });
+    canvas.addEventListener('touchcancel', () => { touchStart = null; });
+    let mouseDown = null;
+    canvas.addEventListener('mousedown', (e) => { mouseDown = { x: e.clientX, y: e.clientY }; });
+    canvas.addEventListener('mousemove', (e) => {
+        if (!mouseDown || state !== 'PLAYING') return;
+        const dx = e.clientX - mouseDown.x, dy = e.clientY - mouseDown.y;
+        if (Math.hypot(dx, dy) < 40) return;
+        if (Math.abs(dx) > Math.abs(dy)) queueDir(dx > 0 ? 1 : -1, 0); else queueDir(0, dy > 0 ? 1 : -1);
+        mouseDown = null;
+    });
+    window.addEventListener('mouseup', () => { mouseDown = null; });
+
+    // ==================== FX HELPERS ====================
+    function floater(cx, cy, text, color) {
+        floaters.push({ x: ox + (cx + 0.5) * cell, y: oy + cy * cell, text, color, age: 0, life: 1.1 });
+    }
+    function ring(cx, cy, color, maxR) {
+        rings.push({ x: ox + (cx + 0.5) * cell, y: oy + (cy + 0.5) * cell, r: cell * 0.4, maxR: maxR || cell * 3.2, color, age: 0 });
+    }
+    function burst(cx, cy, color, n) {
+        const px = ox + (cx + 0.5) * cell, py = oy + (cy + 0.5) * cell;
+        for (let i = 0; i < n; i++) {
+            const a = Math.random() * Math.PI * 2, sp = 40 + Math.random() * 170;
+            particles.push({ x: px, y: py, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.5 + Math.random() * 0.5, age: 0, r: 1.5 + Math.random() * 2.8, color });
+        }
+    }
+    function effTick() {
+        let t = tickMs;
+        if (buffSpeed > 0) t *= 0.62;
+        if (buffSlow > 0) t *= 1.45;
+        return t;
+    }
+
+    // ==================== GAME LOGIC ====================
+    function step() {
+        if (nextDirQueue.length) dir = nextDirQueue.shift();
+        const head = snake[0];
+        let nx = head.x + dir.x, ny = head.y + dir.y;
+
+        // ---- стены ----
+        const out = nx < 0 || nx >= COLS || ny < 0 || ny >= rows;
+        if (out) {
+            if (A.wrap || buffGhost > 0) {
+                nx = (nx + COLS) % COLS; ny = (ny + rows) % rows;
+                sfx.nearMiss();
+            } else {
+                return hitWall(head);
+            }
+        }
+
+        // ---- блоки ----
+        for (let i = 0; i < blocks.length; i++) {
+            const b = blocks[i];
+            if (b.x === nx && b.y === ny) {
+                if (buffGhost > 0) break;
+                return hitBlock(head);
+            }
+        }
+
+        // ---- самокус ----
+        const fi = foods.findIndex(f => f.x === nx && f.y === ny);
+        const eating = fi >= 0;
+        const checkLen = snake.length - (eating ? 0 : 1);
+        for (let i = 0; i < checkLen; i++) {
+            if (snake[i].x === nx && snake[i].y === ny) {
+                if (buffShield > 0 || invulnT > 0) {
+                    buffShield = 0; invulnT = 0.4;
+                    prevSnake = snake.map(s => ({ ...s }));
+                    snake.unshift({ x: nx, y: ny }); snake.pop();
+                    curT = 0;
+                    ring(nx, ny, '#a6ff5e'); sfx.shieldPick(); floater(nx, ny, 'ЩИТ ПОГЛОТИЛ УДАР!', '#a6ff5e');
+                    return;
+                }
+                return selfBite(head);
+            }
+        }
+
+        prevSnake = snake.map(s => ({ ...s }));
+        snake.unshift({ x: nx, y: ny });
+
+        if (eating) {
+            const f = foods[fi];
+            foods.splice(fi, 1);
+            applyFood(f);
+            // песочница: змея заполнила всё поле — некуда ходить → ФИНИШЕР
+            if (A.fillWin && state === 'PLAYING' && snake.length >= COLS * rows - 1) winGame();
+        } else {
+            const tail = snake.pop();
+            prevSnake.push({ ...tail });
+            combo = Math.max(0, combo - 1);
+            if (A.fillWin && state === 'PLAYING' && snake.length >= COLS * rows) winGame();
+        }
+        curT = 0;
+        updateHud();
+    }
+
+    function applyFood(f) {
+        const cx = f.x, cy = f.y;
+        switch (f.type) {
+            case 'gold':
+                score += 50; combo++;
+                burst(cx, cy, '#ffd32a', 22); ring(cx, cy, '#ffd32a');
+                floater(cx, cy, '+50 ✨', '#ffd32a');
+                sfx.gold(); haptic('medium');
+                break;
+            case 'speed':
+                buffSpeed = 8;
+                burst(cx, cy, '#ff9f43', 16); ring(cx, cy, '#ff9f43');
+                floater(cx, cy, 'ТУРБО 8с 🚀', '#ff9f43');
+                sfx.speedPick(); haptic('light');
+                break;
+            case 'ghost':
+                buffGhost = 7;
+                burst(cx, cy, '#a55eea', 16); ring(cx, cy, '#a55eea');
+                floater(cx, cy, 'ФАНТОМ 7с 👻', '#a55eea');
+                sfx.ghostPick(); haptic('light');
+                break;
+            case 'shield':
+                buffShield = 1;
+                burst(cx, cy, '#a6ff5e', 16); ring(cx, cy, '#a6ff5e');
+                floater(cx, cy, 'ЩИТ 🛡', '#a6ff5e');
+                sfx.shieldPick(); haptic('light');
+                break;
+            default: // apple
+                apples++; combo++;
+                score += 10 + Math.min(combo, 10) * 2;
+                tickMs = Math.max(A.minTick, tickMs - A.accel);
+                burst(cx, cy, '#ff4d6d', 16);
+                floater(cx, cy, '+' + (10 + Math.min(combo, 10) * 2), '#ff4d6d');
+                sfx.eat(combo); haptic('medium');
+                if (!A.fillWin && apples < A.goal) {
+                    const p = randomCell();
+                    if (p) foods.push({ type: 'apple', x: p.x, y: p.y, life: Infinity, born: elapsed });
+                }
+        }
+        // рост только от еды (apple/gold): голова уже добавлена в step(),
+        // для бонусов просто откатываем хвост назад (не растём)
+        if (f.type === 'apple' || f.type === 'gold') {
+            prevSnake.push({ ...prevSnake[prevSnake.length - 1] });
+        } else {
+            const tail = snake.pop();
+            prevSnake.push({ ...tail });
+        }
+        checkWin();
+    }
+
+    function checkWin() {
+        if (state !== 'PLAYING') return;
+        if (A.surviveAfterGoal) {
+            // ХАОС: сначала цель по яблокам, затем 90 секунд выживания после неё
+            if (apples >= A.goal) {
+                if (goalReachedAt < 0) {
+                    goalReachedAt = elapsed;
+                    score += 500;
+                    floater(snake[0].x, snake[0].y, 'ЦЕЛЬ ВЗЯТА! ВЫЖИ 90с 🔥', '#ffd32a');
+                    ring(snake[0].x, snake[0].y, '#ffd32a', cell * 6);
+                    sfx.goalReached(); haptic('heavy');
+                }
+                if (elapsed - goalReachedAt >= A.surviveAfterGoal) winGame();
+            }
+        } else if (A.fillWin) {
+            // песочница — победа проверяется в step() при заполнении поля
+        } else if (apples >= A.goal) {
+            winGame();
+        }
+    }
+
+    function hitWall(h) { endGame(false, 'ТЫ ВРЕЗАЛСЯ В СТЕНУ!', 'Нейронная сетка оказалась крепче, чем казалось…', h); }
+    function hitBlock(h) { endGame(false, 'БЛОК! 💀', 'Глючный блок материализовался прямо перед носом.', h); }
+    function selfBite(h) { endGame(false, 'ТЫ УКУСИЛ СЕБЯ!', 'Классика жанра. Даже легенды так заканчивают.', h); }
+    function bombed(h) { endGame(false, '💥 БОМБА!', 'Тик-так… ты слишком долго крутился рядом.', h); }
+
+    function endGame(win, title, flavor, hitCell) {
+        if (state !== 'PLAYING') return;
+        deathAnimT = win ? 0.35 : 0.7;
+        pendingOver = { win, title, flavor };
+        state = 'DYING';
+        flashT = 1; shakeT = 0.5; shakeMag = win ? 4 : 10;
+        if (hitCell) burst(hitCell.x, hitCell.y, win ? A.theme : '#ff4d6d', 30);
+        if (win) { sfx.fanfare(); } else { sfx.die(); haptic('heavy'); }
+        sfx.stopMusic();
+    }
+
+    function winGame() {
+        score += 500;
+        markCleared(diffKey);              // визуальная отметка «пройдено» в главном меню
+        endGame(true, A.ending.title, A.ending.flavor, snake[0]);
+    }
+
+    function finalizeOver() {
+        state = 'OVER';
+        const isRecord = score > best;
+        if (isRecord) { best = score; setBest(best); }
+        const dt = document.getElementById('deathTitle');
+        dt.textContent = pendingOver.title;
+        dt.className = pendingOver.win ? 'ending-title' : 'death-title';
+        if (pendingOver.win) { dt.style.color = A.theme; dt.style.textShadow = '0 0 26px ' + A.theme; }
+        else { dt.style.color = ''; dt.style.textShadow = ''; }
+        document.getElementById('endFlavor').textContent = pendingOver.flavor;
+        document.getElementById('finalScore').textContent = score;
+        document.getElementById('finalBest').textContent = best;
+        document.getElementById('recBadge').classList.toggle('hidden-rec', !isRecord);
+        hudEl.style.display = 'none';
+        pauseBtn.style.display = 'none';
+        muteBtn.style.display = 'none';
+        goalChip.style.display = 'none';
+        buffBar.innerHTML = '';
+        comboBadge.style.opacity = 0;
+        refreshBestLabels();
+        overScreen.classList.remove('hidden');
+    }
+
+    // ==================== BOMBS ====================
+    function updateBombs(dt) {
+        const head = snake[0];
+        for (let i = bombs.length - 1; i >= 0; i--) {
+            const b = bombs[i];
+            b.fuse -= dt;
+            if (b.fuse <= 0) { explodeBomb(i); continue; }
+            const interval = b.fuse > 3 ? 0.8 : b.fuse > 1.2 ? 0.35 : 0.16;
+            b.tickAcc += dt;
+            if (b.tickAcc >= interval) {
+                b.tickAcc = 0;
+                const dist = Math.max(Math.abs(b.x - head.x), Math.abs(b.y - head.y));
+                if (dist <= 3) sfx.tick();
+            }
+        }
+    }
+    function explodeBomb(i) {
+        const b = bombs[i];
+        bombs.splice(i, 1);
+        sfx.explosion();
+        shakeT = 0.6; shakeMag = 14; flashT = 0.8;
+        burst(b.x, b.y, '#ff9f43', 34);
+        ring(b.x, b.y, '#ff9f43', cell * 5);
+        haptic('heavy');
+        const head = snake[0];
+        const inBlast = Math.abs(head.x - b.x) <= 1 && Math.abs(head.y - b.y) <= 1;
+        if (inBlast) {
+            if (buffShield > 0) { buffShield = 0; floater(head.x, head.y, 'ЩИТ СПАС!', '#a6ff5e'); sfx.shieldPick(); }
+            else if (invulnT <= 0) { bombed(head); return; }
+        }
+        for (let j = blocks.length - 1; j >= 0; j--) {
+            const bl = blocks[j];
+            if (Math.abs(bl.x - b.x) <= 1 && Math.abs(bl.y - b.y) <= 1) { blocks.splice(j, 1); burst(bl.x, bl.y, '#8898aa', 8); }
+        }
+        invulnT = 0.5;
+        const nearRisk = Math.abs(head.x - b.x) <= 2 && Math.abs(head.y - b.y) <= 2;
+        if (nearRisk && !inBlast) {
+            score += 25; floater(b.x, b.y, '+25 РИСК!', '#ff9f43'); sfx.nearMiss();
+        }
+    }
+
+    // ==================== RENDER ====================
+    function drawBackground() {
+        ctx.fillStyle = '#05050a';
+        ctx.fillRect(0, 0, cw, ch);
+        const grd = ctx.createRadialGradient(cw / 2, ch / 2, 40, cw / 2, ch / 2, Math.max(cw, ch) * 0.7);
+        grd.addColorStop(0, 'rgba(20,30,60,0.55)');
+        grd.addColorStop(1, 'rgba(5,5,10,0)');
+        ctx.fillStyle = grd;
+        ctx.fillRect(0, 0, cw, ch);
+
+        const fw = COLS * cell, fh = rows * cell;
+        ctx.strokeStyle = A.theme + '59';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = A.theme;
+        ctx.shadowBlur = 12;
+        ctx.strokeRect(ox - 1, oy - 1, fw + 2, fh + 2);
+        ctx.shadowBlur = 0;
+
+        ctx.strokeStyle = 'rgba(120,140,190,0.07)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let c = 1; c < COLS; c++) { const x = ox + c * cell; ctx.moveTo(x, oy); ctx.lineTo(x, oy + fh); }
+        for (let r = 1; r < rows; r++) { const y = oy + r * cell; ctx.moveTo(ox, y); ctx.lineTo(ox + fw, y); }
+        ctx.stroke();
+
+        if (A.wrap || buffGhost > 0) {
+            ctx.strokeStyle = 'rgba(166,255,94,' + (0.25 + 0.15 * Math.sin(foodPulse * 3)).toFixed(3) + ')';
+            ctx.setLineDash([6, 6]);
+            ctx.strokeRect(ox - 4, oy - 4, fw + 8, fh + 8);
+            ctx.setLineDash([]);
+        }
+
+        // песочница: прогресс заполнения поля — «стены» из уже занятых клеток светятся
+        if (A.fillWin && state !== 'MENU') {
+            const pct = snake.length / (COLS * rows);
+            ctx.save();
+            ctx.globalAlpha = 0.10 + 0.25 * pct;
+            ctx.strokeStyle = '#ffd32a';
+            ctx.lineWidth = 3 + 5 * pct;
+            ctx.shadowColor = '#ffd32a'; ctx.shadowBlur = 10 + 20 * pct;
+            ctx.strokeRect(ox - 2, oy - 2, fw + 4, fh + 4);
+            ctx.restore();
+        }
+    }
+
+    function roundRect(x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
+    }
+
+    function lerpPos(i) {
+        const cur = snake[i];
+        const prev = prevSnake[Math.min(i, prevSnake.length - 1)] || cur;
+        const dx = cur.x - prev.x, dy = cur.y - prev.y;
+        if (Math.abs(dx) > 1 || Math.abs(dy) > 1) return { x: cur.x, y: cur.y };
+        return { x: prev.x + dx * curT, y: prev.y + dy * curT };
+    }
+
+    function drawFoods() {
+        for (const f of foods) {
+            const px = ox + (f.x + 0.5) * cell, py = oy + (f.y + 0.5) * cell;
+            const pulse = 1 + Math.sin(foodPulse * 5) * 0.12;
+            let rad = cell * 0.34 * pulse;
+            let expiring = false;
+            if (f.life !== Infinity) {
+                const left = f.life - (elapsed - f.born);
+                if (left <= 0) { f.dead = true; continue; }
+                if (left < 3) { expiring = true; rad *= 0.85 + 0.15 * Math.sin(foodPulse * 14); }
+            }
+            ctx.save();
+            ctx.globalAlpha = expiring ? 0.55 + 0.45 * Math.abs(Math.sin(foodPulse * 7)) : 1;
+            const col = { apple: '#ff4d6d', gold: '#ffd32a', speed: '#ff9f43', ghost: '#a55eea', shield: '#a6ff5e' }[f.type] || '#ff4d6d';
+            ctx.shadowColor = col; ctx.shadowBlur = 16;
+            ctx.fillStyle = col;
+            if (f.type === 'apple' || f.type === 'gold') {
+                ctx.beginPath(); ctx.arc(px, py + rad * 0.08, rad, 0, Math.PI * 2); ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.beginPath(); ctx.arc(px - rad * 0.32, py - rad * 0.3, rad * 0.22, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#a6ff5e';
+                ctx.beginPath(); ctx.ellipse(px + rad * 0.25, py - rad * 0.95, rad * 0.34, rad * 0.16, -0.7, 0, Math.PI * 2); ctx.fill();
+                if (f.type === 'gold') {
+                    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                    ctx.font = 'bold ' + Math.round(cell * 0.5) + 'px sans-serif';
+                    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    ctx.fillText('★', px, py + 1);
+                }
+            } else {
+                ctx.translate(px, py); ctx.rotate(Math.sin(foodPulse * 2) * 0.25);
+                ctx.beginPath();
+                ctx.moveTo(0, -rad); ctx.lineTo(rad * 0.8, 0); ctx.lineTo(0, rad); ctx.lineTo(-rad * 0.8, 0);
+                ctx.closePath(); ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                ctx.font = Math.round(cell * 0.42) + 'px sans-serif';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                const ic = { speed: '🚀', ghost: '👻', shield: '🛡' }[f.type] || '?';
+                ctx.fillText(ic, 0, 1);
+            }
+            ctx.restore();
+        }
+        foods = foods.filter(f => !f.dead);
+    }
+
+    function drawBombs() {
+        for (const b of bombs) {
+            const px = ox + (b.x + 0.5) * cell, py = oy + (b.y + 0.5) * cell;
+            const frac = b.fuse / b.maxFuse;
+            const danger = 1 - frac;
+            const blink = danger > 0.55 ? (Math.sin(elapsed * (8 + danger * 22)) > 0 ? 1 : 0.35) : 1;
+            ctx.save();
+            ctx.globalAlpha = blink;
+            ctx.shadowColor = '#ff4d6d'; ctx.shadowBlur = 14;
+            ctx.fillStyle = '#2b2d42';
+            ctx.beginPath(); ctx.arc(px, py + cell * 0.05, cell * 0.34, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#ff4d6d';
+            ctx.beginPath(); ctx.arc(px, py - cell * 0.28, cell * 0.1, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#ffd32a'; ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.arc(px, py + cell * 0.05, cell * 0.42, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * frac); ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    function drawBlocks() {
+        for (const b of blocks) {
+            const x = ox + b.x * cell + 1.5, y = oy + b.y * cell + 1.5, size = cell - 3;
+            ctx.save();
+            ctx.fillStyle = 'rgba(136,152,170,0.25)';
+            ctx.strokeStyle = 'rgba(200,215,235,0.5)';
+            ctx.lineWidth = 1.5;
+            roundRect(x, y, size, size, size * 0.2);
+            ctx.fill(); ctx.stroke();
+            ctx.strokeStyle = 'rgba(200,215,235,0.35)';
+            ctx.beginPath();
+            ctx.moveTo(x + size * 0.25, y + size * 0.25); ctx.lineTo(x + size * 0.75, y + size * 0.75);
+            ctx.moveTo(x + size * 0.75, y + size * 0.25); ctx.lineTo(x + size * 0.25, y + size * 0.75);
+            ctx.stroke();
+            ctx.restore();
+        }
+    }
+
+    function drawSnake() {
+        const n = snake.length;
+        const ghostOn = buffGhost > 0;
+        for (let i = n - 1; i >= 0; i--) {
+            const p = lerpPos(i);
+            const x = ox + p.x * cell + 1.5;
+            const y = oy + p.y * cell + 1.5;
+            const size = cell - 3;
+            const t = i / Math.max(1, n - 1);
+            const hue = 170 + t * 55;
+            const light = 60 - t * 18;
+            ctx.save();
+            if (ghostOn) ctx.globalAlpha = 0.55 + 0.15 * Math.sin(elapsed * 10);
+            if (invulnT > 0 && Math.sin(elapsed * 40) > 0) ctx.globalAlpha = 0.3;
+            ctx.fillStyle = 'hsl(' + hue + ', 95%, ' + light + '%)';
+            if (i === 0) {
+                ctx.shadowColor = buffShield > 0 ? '#a6ff5e' : 'rgba(0,242,254,0.8)';
+                ctx.shadowBlur = 14;
+                roundRect(x, y, size, size, size * 0.35);
+                ctx.fill();
+                if (buffShield > 0) {
+                    ctx.strokeStyle = '#a6ff5e'; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.arc(x + size / 2, y + size / 2, size * 0.75 + Math.sin(elapsed * 6) * 2, 0, Math.PI * 2); ctx.stroke();
+                }
+                const cxp = x + size / 2, cyp = y + size / 2;
+                const ex = dir.x, ey = dir.y;
+                const perpX = -ey, perpY = ex;
+                const eo = size * 0.22, fo = size * 0.14, er = Math.max(1.6, size * 0.11);
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#05050a';
+                ctx.beginPath();
+                ctx.arc(cxp + ex * fo + perpX * eo, cyp + ey * fo + perpY * eo, er, 0, Math.PI * 2);
+                ctx.arc(cxp + ex * fo - perpX * eo, cyp + ey * fo - perpY * eo, er, 0, Math.PI * 2);
+                ctx.fill();
+            } else {
+                roundRect(x, y, size, size, size * 0.3);
+                ctx.fill();
+            }
+            ctx.restore();
+        }
+    }
+
+    function drawParticles(dt) {
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.age += dt;
+            if (p.age >= p.life) { particles.splice(i, 1); continue; }
+            p.x += p.vx * dt; p.y += p.vy * dt;
+            p.vx *= 0.96; p.vy *= 0.96;
+            const a = 1 - p.age / p.life;
+            ctx.globalAlpha = a;
+            ctx.fillStyle = p.color;
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.r * a, 0, Math.PI * 2); ctx.fill();
+        }
+        for (let i = rings.length - 1; i >= 0; i--) {
+            const r = rings[i];
+            r.age += dt;
+            const k = r.age / 0.45;
+            if (k >= 1) { rings.splice(i, 1); continue; }
+            ctx.globalAlpha = 1 - k;
+            ctx.strokeStyle = r.color; ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.arc(r.x, r.y, r.r + (r.maxR - r.r) * k, 0, Math.PI * 2); ctx.stroke();
+        }
+        for (let i = floaters.length - 1; i >= 0; i--) {
+            const fl = floaters[i];
+            fl.age += dt;
+            if (fl.age >= fl.life) { floaters.splice(i, 1); continue; }
+            const k = fl.age / fl.life;
+            ctx.globalAlpha = 1 - k;
+            ctx.fillStyle = fl.color;
+            ctx.font = 'bold 13px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(fl.text, fl.x, fl.y - 18 * k);
+        }
+        ctx.globalAlpha = 1;
+    }
+
+    function drawGlitch() {
+        if (glitchT <= 0) return;
+        glitchSeed = (glitchSeed * 16807) % 2147483647;
+        for (let i = 0; i < 5; i++) {
+            const sy = (glitchSeed >> (i * 3)) % Math.max(1, ch - 40);
+            const sh = 8 + ((glitchSeed >> i) % 26);
+            const off = (((glitchSeed >> (i + 2)) % 60) - 30) * (glitchT / 2);
+            try { ctx.drawImage(canvas, 0, sy * dpr, cw * dpr, sh * dpr, off, sy, cw, sh); } catch (e) {}
+        }
+        ctx.globalAlpha = 0.12 * Math.min(1, glitchT);
+        ctx.fillStyle = '#ff4d6d';
+        ctx.fillRect(0, 0, cw, ch);
+        ctx.globalAlpha = 1;
+    }
+
+    // ==================== LOOP ====================
+    let loopPrev = 0;
+    function loop(now) {
+        requestAnimationFrame(loop);
+        const dt = Math.min(0.05, (now - (loopPrev || now)) / 1000);
+        loopPrev = now;
+        foodPulse += dt;
+
+        if (state === 'PLAYING') {
+            elapsed += dt;
+            const tk = effTick();
+            curT = Math.min(1, curT + dt * 1000 / tk);
+            acc += dt * 1000;
+            let guard = 0;
+            while (acc >= tk && state === 'PLAYING' && guard++ < 4) {
+                acc -= tk;
+                step();
+            }
+            if (state === 'PLAYING') {
+                updateBombs(dt);
+                spawnTimer += dt;
+                if (spawnTimer >= A.spawnEvery) { spawnTimer = 0; spawnEventItem(); }
+                buffSpeed = Math.max(0, buffSpeed - dt);
+                buffGhost = Math.max(0, buffGhost - dt);
+                buffSlow = Math.max(0, buffSlow - dt);
+                glitchT = Math.max(0, glitchT - dt);
+                invulnT = Math.max(0, invulnT - dt);
+                if (diffKey === 'hard' && Math.random() < dt * 0.03) {
+                    glitchT = 1.4; sfx.glitch();
+                    floater(snake[0].x, snake[0].y, 'СИСТЕМНЫЙ СБОЙ ⚠', '#4facfe');
+                }
+                checkWin();
+                renderBuffBar();
+                renderGoalChip();
+            }
+        } else if (state === 'DYING') {
+            deathAnimT -= dt;
+            curT = Math.min(1, curT + dt * 6);
+            if (deathAnimT <= 0) finalizeOver();
+        }
+
+        let sx = 0, sy = 0;
+        if (shakeT > 0) {
+            shakeT -= dt;
+            sx = (Math.random() - 0.5) * shakeMag * Math.max(0, shakeT / 0.6);
+            sy = (Math.random() - 0.5) * shakeMag * Math.max(0, shakeT / 0.6);
+        }
+        ctx.save();
+        ctx.translate(sx, sy);
+        drawBackground();
+        if (state !== 'MENU') {
+            drawBlocks();
+            drawFoods();
+            drawBombs();
+            drawSnake();
+        }
+        drawParticles(dt);
+        ctx.restore();
+
+        drawGlitch();
+
+        if (flashT > 0) {
+            ctx.fillStyle = 'rgba(255,77,109,' + (flashT * 0.35).toFixed(3) + ')';
+            ctx.fillRect(0, 0, cw, ch);
+            flashT -= dt * 2;
+        }
+    }
+
+    // ==================== UI ====================
+    const hudEl = document.getElementById('hud');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const startScreen = document.getElementById('startScreen');
+    const overScreen = document.getElementById('overScreen');
+    const pauseScreen = document.getElementById('pauseScreen');
+    const cdScreen = document.getElementById('cdScreen');
+    const cdText = document.getElementById('cdText');
+    const scoreVal = document.getElementById('scoreVal');
+    const bestVal = document.getElementById('bestVal');
+    const buffBar = document.getElementById('buffBar');
+    const comboBadge = document.getElementById('comboBadge');
+    const goalChip = document.getElementById('goalChip');
+    const sandboxPicker = document.getElementById('sandboxPicker');
+
+    function updateHud() {
+        scoreVal.textContent = score || 0;
+        bestVal.textContent = best;
+        refreshBestLabels();
+        if (combo >= 3) { comboBadge.textContent = 'COMBO ×' + combo; comboBadge.style.opacity = 1; }
+        else comboBadge.style.opacity = 0;
+    }
+    function cap(k) { return k.charAt(0).toUpperCase() + k.slice(1); }
+    function refreshBestLabels() {
+        const cleared = getCleared();
+        for (const k of ['easy', 'normal', 'hard', 'sandbox']) {
+            const el = document.getElementById('best' + cap(k));
+            if (el) el.textContent = getBest(k);
+            const cl = document.getElementById('clear' + cap(k));
+            if (cl) cl.textContent = cleared[k] ? '🏅' : '';
+            const btn = document.querySelector('.diff-btn[data-diff="' + k + '"]');
+            if (btn) btn.classList.toggle('cleared', !!cleared[k]);
+        }
+    }
+    // чип текущей цели под счётом
+    function renderGoalChip() {
+        let html = '';
+        if (A.fillWin) {
+            const pct = Math.min(100, Math.round(snake.length / (COLS * rows) * 100));
+            html = '🏗 ПОЛЕ: ' + snake.length + '/' + (COLS * rows) + ' (' + pct + '%)';
+        } else if (A.surviveAfterGoal) {
+            if (apples >= A.goal) {
+                const left = Math.max(0, Math.ceil(A.surviveAfterGoal - (elapsed - goalReachedAt)));
+                html = '🔥 ВЫЖИ ЕЩЁ: ' + left + 'с';
+            } else {
+                html = '🍎 ЯБЛОКИ: ' + apples + '/' + A.goal;
+            }
+        } else {
+            html = '🍎 ЯБЛОКИ: ' + apples + '/' + A.goal;
+        }
+        goalChip.innerHTML = html;
+        goalChip.style.color = A.theme;
+        goalChip.style.display = (state === 'PLAYING' || state === 'PAUSED' || state === 'COUNTDOWN') ? 'block' : 'none';
+    }
+    function renderBuffBar() {
+        let html = '';
+        if (buffShield > 0) html += '<span class="buff-chip">🛡 ЩИТ</span>';
+        if (buffSpeed > 0) html += '<span class="buff-chip">🚀 ' + Math.ceil(buffSpeed) + 'с</span>';
+        if (buffGhost > 0) html += '<span class="buff-chip">👻 ' + Math.ceil(buffGhost) + 'с</span>';
+        if (buffSlow > 0) html += '<span class="buff-chip" style="color:#4facfe">🐌 ' + Math.ceil(buffSlow) + 'с</span>';
+        if (!A.fillWin && !A.surviveAfterGoal) {
+            const left = A.goal - apples;
+            if (left > 0 && left <= 10) html += '<span class="buff-chip" style="color:' + A.theme + '">ФИНАЛ ЧЕРЕЗ ' + left + ' 🍎</span>';
+        } else if (A.surviveAfterGoal && apples >= A.goal) {
+            const left = Math.max(0, A.surviveAfterGoal - (elapsed - goalReachedAt));
+            if (left < 20) html += '<span class="buff-chip" style="color:' + A.theme + '">ФИНАЛ ЧЕРЕЗ ' + Math.ceil(left) + 'с ⏱</span>';
+        }
+        if (buffBar.innerHTML !== html) buffBar.innerHTML = html;
+    }
+
+    let cdInterval = null;
+    function beginGame() {
+        sfx.init();
+        sfx.ui();
+        clearInterval(cdInterval);
+        resetGame();
+        startScreen.classList.add('hidden');
+        overScreen.classList.add('hidden');
+        pauseScreen.classList.add('hidden');
+        hudEl.style.display = 'flex';
+        pauseBtn.style.display = 'flex';
+        muteBtn.style.display = 'flex';
+        state = 'COUNTDOWN';
+        let cd = 3;
+        cdText.textContent = cd;
+        cdScreen.classList.remove('hidden');
+        sfx.countdown(false);
+        cdInterval = setInterval(() => {
+            cd--;
+            if (cd > 0) {
+                cdText.textContent = cd;
+                cdText.style.animation = 'none'; void cdText.offsetWidth; cdText.style.animation = '';
+                sfx.countdown(false);
+            } else {
+                clearInterval(cdInterval);
+                cdScreen.classList.add('hidden');
+                sfx.countdown(true);
+                state = 'PLAYING';
+                sfx.startMusic(diffKey);
+            }
+        }, 620);
+    }
+
+    function pause() {
+        if (state !== 'PLAYING') return;
+        state = 'PAUSED';
+        sfx.stopMusic();
+        pauseScreen.classList.remove('hidden');
+    }
+    function resume() {
+        if (state !== 'PAUSED') return;
+        state = 'PLAYING';
+        acc = 0; curT = 0;
+        sfx.startMusic(diffKey);
+        pauseScreen.classList.add('hidden');
+    }
+
+    function syncSandboxPicker() {
+        sandboxPicker.style.display = diffKey === 'sandbox' ? 'flex' : 'none';
+        document.querySelectorAll('.sb-speed').forEach(b => b.classList.toggle('sel', b.dataset.spd === sbSpeed));
+    }
+    document.querySelectorAll('.diff-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            diffKey = btn.dataset.diff;
+            D = DIFFS[diffKey];
+            A = activeDiff();
+            best = getBest();
+            localStorage.setItem('neon_snake_diff', diffKey);
+            document.querySelectorAll('.diff-btn').forEach(b => b.classList.toggle('sel', b === btn));
+            syncSandboxPicker();
+            sfx.init(); sfx.ui();
+            updateHud();
+        });
+    });
+    document.querySelectorAll('.sb-speed').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            sbSpeed = btn.dataset.spd;
+            localStorage.setItem('neon_snake_sb_speed', sbSpeed);
+            A = activeDiff();
+            syncSandboxPicker();
+            sfx.init(); sfx.ui();
+        });
+    });
+    syncSandboxPicker();
+    document.getElementById('startBtn').addEventListener('click', beginGame);
+    document.getElementById('restartBtn').addEventListener('click', beginGame);
+    document.getElementById('menuLink').addEventListener('click', () => {
+        overScreen.classList.add('hidden');
+        startScreen.classList.remove('hidden');
+        state = 'MENU';
+        goalChip.style.display = 'none';
+        refreshBestLabels();
+    });
+    document.getElementById('resumeBtn').addEventListener('click', resume);
+    pauseBtn.addEventListener('click', () => {
+        if (state === 'PLAYING') pause();
+        else if (state === 'PAUSED') resume();
+    });
+    muteBtn.addEventListener('click', () => {
+        sfx.init();
+        sfx.muted = !sfx.muted;
+        muteBtn.textContent = sfx.muted ? '🔇' : '🔊';
+        if (sfx.muted) sfx.stopMusic();
+        else if (state === 'PLAYING') sfx.startMusic(diffKey);
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden && state === 'PLAYING') pause();
+    });
+
+    // применяем сохранённый выбор режима при загрузке
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.toggle('sel', b.dataset.diff === diffKey));
+    updateHud();
+    resetGame();
+    state = 'MENU';
+    syncSandboxPicker();
+    refreshBestLabels();
+    requestAnimationFrame(loop);
+})();
+
+</script>
+</body>
+</html>
