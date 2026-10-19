@@ -214,15 +214,13 @@
         </div>
         <!-- sandbox speed picker -->
         <div class="diff-list" id="sandboxPicker" style="display:none; margin-top:-6px;">
-            <span style="width:100%; text-align:center; font-size:11px; letter-spacing:2px; color:#8fa0b5; margin-bottom:2px;">СКОРОСТЬ ЗМЕИ В ПЕСОЧНИЦЕ — ИВЕТОВ НЕТ</span>
             <button class="sb-speed sel" data-spd="easy">🌿 МЕДЛЕННО</button>
             <button class="sb-speed" data-spd="normal">⚡ СРЕДНЕ</button>
             <button class="sb-speed" data-spd="hard">💀 БЫСТРО</button>
         </div>
         <button class="btn-main" id="startBtn">ПОГНАЛИ!</button>
         <div class="hint">
-            Свайпай по экрану или используй
-            <div class="keys"><span class="key">←</span><span class="key">↑</span><span class="key">↓</span><span class="key">→</span>&nbsp;<span class="key">W</span><span class="key">A</span><span class="key">S</span><span class="key">D</span></div>
+            Свапай по экрану или нажимай на клавиши W A S D или стрелочки
         </div>
     </div>
 
@@ -805,7 +803,8 @@
                 burst(cx, cy, '#ff4d6d', 16);
                 floater(cx, cy, '+' + (10 + Math.min(combo, 10) * 2), '#ff4d6d');
                 sfx.eat(combo); haptic('medium');
-                if (!A.fillWin && apples < A.goal) {
+                // всегда держим на поле яблоко (в песочнице goal undefined — тоже спавним)
+                if (!(apples < A.goal) || foods.length === 0) {
                     const p = randomCell();
                     if (p) foods.push({ type: 'apple', x: p.x, y: p.y, life: Infinity, born: elapsed });
                 }
